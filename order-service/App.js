@@ -3,10 +3,11 @@ const cors = require("cors");
 const connectDB = require("./config/database");
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use("/doc", express.static(__dirname + "/doc"));
 
 connectDB();
 

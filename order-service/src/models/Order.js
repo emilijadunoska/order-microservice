@@ -15,12 +15,12 @@ const orderSchema = new Schema({
     zipcode: { type: String, required: true },
   },
   billing_address: {
-    street: { type: String, required: false },
+    street: { type: String, required: true },
     suite: { type: String },
-    city: { type: String, required: false },
-    zipcode: { type: String, required: false },
+    city: { type: String, required: true },
+    zipcode: { type: String, required: true },
   },
-  phone: { type: String, required: false },
+  phone: { type: String, required: true },
   status: { type: String, required: true },
   order: [
     {
