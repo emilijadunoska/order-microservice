@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/database");
 
+const { specs, swaggerUi } = require("./swagger");
+
 const app = express();
 const port = 5000;
 
@@ -12,7 +14,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use("/doc", express.static(__dirname + "/doc"));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 
 connectDB();
 

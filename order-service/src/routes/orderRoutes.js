@@ -1,10 +1,27 @@
+/**
+ * @swagger
+ * tags:
+ *   name: Orders
+ *   description: API operations for managing orders
+ */
 const express = require("express");
 const router = express.Router();
 const uuid = require("uuid");
 
 const Order = require("../models/Order");
 
-// get all orders
+/**
+ * @swagger
+ * /api/orders:
+ *   get:
+ *     summary: Get all orders
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             example: [{"orderId": "1", ...}]
+ */
 router.get("/orders", async (req, res) => {
   try {
     const orders = await Order.find();
@@ -16,7 +33,28 @@ router.get("/orders", async (req, res) => {
   }
 });
 
-// get order by id
+/**
+ * @swagger
+ * /api/orders/orderId/{orderId}:
+ *   get:
+ *     summary: Get order by ID
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         description: ID of the order
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             example: {"orderId": "1", ...}
+ *       404:
+ *         description: Order not found
+ */
 router.get("/orders/orderId/:orderId", async (req, res) => {
   try {
     const orderId = req.params.orderId;
@@ -35,7 +73,28 @@ router.get("/orders/orderId/:orderId", async (req, res) => {
   }
 });
 
-// get order by user id
+/**
+ * @swagger
+ * /api/orders/user/{userId}:
+ *   get:
+ *     summary: Get orders by user ID
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         description: ID of the user
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             example: [{"orderId": "1", ...}]
+ *       404:
+ *         description: No orders found for the user
+ */
 router.get("/orders/user/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -55,7 +114,28 @@ router.get("/orders/user/:userId", async (req, res) => {
   }
 });
 
-//create an order
+/**
+ * @swagger
+ * /api/order:
+ *   post:
+ *     summary: Create a new order
+ *     tags: [Orders]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           example: { "date": "2023-12-01", ... }
+ *     responses:
+ *       201:
+ *         description: Order created successfully
+ *         content:
+ *           application/json:
+ *             example: {"orderId": "1", ...}
+ *       500:
+ *         description: Internal server error
+ */
+
+// create an order
 router.post("/order", async (req, res) => {
   try {
     const {
@@ -96,7 +176,28 @@ router.post("/order", async (req, res) => {
   }
 });
 
-// delete an order by order id
+/**
+ * @swagger
+ * /api/orders/orderId/{orderId}:
+ *   delete:
+ *     summary: Delete an order by order ID
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         description: ID of the order
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order deleted successfully
+ *         content:
+ *           application/json:
+ *             example: {"message": "Order deleted successfully", "deletedOrder": {"orderId": "1", ...}}
+ *       404:
+ *         description: Order not found for deletion
+ */
 router.delete("/orders/orderId/:orderId", async (req, res) => {
   try {
     const orderId = req.params.orderId;
@@ -118,7 +219,33 @@ router.delete("/orders/orderId/:orderId", async (req, res) => {
   }
 });
 
-// Update the status of a specific order by order id
+/**
+ * @swagger
+ * /api/orders/orderId/{orderId}/status:
+ *   put:
+ *     summary: Update the status of a specific order by order ID
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         description: ID of the order
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           example: { "status": "Shipped" }
+ *     responses:
+ *       200:
+ *         description: Order status updated successfully
+ *         content:
+ *           application/json:
+ *             example: {"orderId": "1", ...}
+ *       404:
+ *         description: Order not found for status update
+ */
 router.put("/orders/orderId/:orderId/status", async (req, res) => {
   try {
     const orderId = req.params.orderId;
