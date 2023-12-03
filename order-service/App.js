@@ -5,7 +5,12 @@ const connectDB = require("./config/database");
 const app = express();
 const port = 5000;
 
-app.use(cors());
+const corsOptions = {
+  origin: "*",
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use("/doc", express.static(__dirname + "/doc"));
 
