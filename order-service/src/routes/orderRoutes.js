@@ -8,31 +8,34 @@ const express = require("express");
 const router = express.Router();
 const uuid = require("uuid");
 const axios = require("axios");
-
 const Order = require("../models/Order");
-const { USER_SERVICE } = require("../../Constants");
+const { USER_SERVICE, CATALOG_SERVICE } = require("../../Constants");
 
+// make a call to user serviced to get user information about the order
 const fetchUserInformation = async (userId) => {
   try {
-    const response = await fetch(`${USER_SERVICE}/users/${userId}`);
+    const response = await axios.get(`${USER_SERVICE}/users/${userId}`);
 
-    if (!response.ok) {
+    if (response.status !== 200) {
       throw new Error(`Failed to fetch user information for user ${userId}`);
     }
 
-    if (typeof response.json === "function") {
-      const userData = await response.json();
-      return { status: response.status, data: userData };
-    } else {
-      const textData = await response.text();
-      try {
-        const jsonData = JSON.parse(textData);
-        return { status: response.status, data: jsonData };
-      } catch (parseError) {
-        console.error("Error parsing JSON:", parseError);
-        throw new Error("Failed to parse JSON response");
-      }
+    return { status: response.status, data: response.data };
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+};
+
+// make a call to catalog service to get book information for the order
+const fetchBookInformation = async (bookId) => {
+  try {
+    const response = await axios.get(`${CATALOG_SERVICE}/books/${bookId}`);
+    if (response.status !== 200) {
+      throw new Error(`Failed to fetch user information for book ${bookId}`);
     }
+    const bookData = JSON.parse(response.data);
+    return { status: response.status, data: bookData };
   } catch (error) {
     console.error(error);
     throw error;
@@ -181,13 +184,30 @@ router.post("/order", async (req, res) => {
     } = req.body;
 
     const userId = customer.userId;
-    console.log(userId);
     const userResponse = await fetchUserInformation(userId);
-    console.log("User Response:", userResponse);
-    console.log("User Response status code:", userResponse.status);
 
     if (userResponse.status === 200 || userResponse.status == 201) {
       const userData = userResponse.data;
+
+      const orderItems = await Promise.all(
+        order.map(async (item) => {
+          const bookInfoResponse = await fetchBookInformation(item._id);
+          if (bookInfoResponse.status === 200) {
+            const bookData = bookInfoResponse.data;
+            return {
+              _id: item._id,
+              name: bookData.name,
+              price: bookData.price,
+              quantity: item.quantity,
+            };
+          } else {
+            throw new Error(
+              `Failed to fetch book information for book ${item._id}`
+            );
+          }
+        })
+      );
+
       const orderId = uuid.v4();
       const newOrder = new Order({
         orderId,
@@ -198,18 +218,16 @@ router.post("/order", async (req, res) => {
           email: userData.email,
           name: userData.username,
         },
-        order,
+        order: orderItems,
         status,
-        items,
+        items: orderItems,
         delivery_address,
         billing_address,
         phone,
         payment,
         total,
       });
-
       const savedOrder = await newOrder.save();
-      console.log("Saved order:", savedOrder);
       res.status(201).json(savedOrder);
       console.log("New order created:", savedOrder);
     }
