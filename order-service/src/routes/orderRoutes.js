@@ -7,8 +7,37 @@
 const express = require("express");
 const router = express.Router();
 const uuid = require("uuid");
+const axios = require("axios");
 
 const Order = require("../models/Order");
+const { USER_SERVICE } = require("../../Constants");
+
+const fetchUserInformation = async (userId) => {
+  try {
+    const response = await fetch(`${USER_SERVICE}/users/${userId}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user information for user ${userId}`);
+    }
+
+    if (typeof response.json === "function") {
+      const userData = await response.json();
+      return { status: response.status, data: userData };
+    } else {
+      const textData = await response.text();
+      try {
+        const jsonData = JSON.parse(textData);
+        return { status: response.status, data: jsonData };
+      } catch (parseError) {
+        console.error("Error parsing JSON:", parseError);
+        throw new Error("Failed to parse JSON response");
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+};
 
 /**
  * @swagger
@@ -151,25 +180,39 @@ router.post("/order", async (req, res) => {
       total,
     } = req.body;
 
-    const orderId = uuid.v4();
+    const userId = customer.userId;
+    console.log(userId);
+    const userResponse = await fetchUserInformation(userId);
+    console.log("User Response:", userResponse);
+    console.log("User Response status code:", userResponse.status);
 
-    const newOrder = new Order({
-      orderId,
-      date,
-      customer,
-      order,
-      status,
-      items,
-      delivery_address,
-      billing_address,
-      phone,
-      payment,
-      total,
-    });
+    if (userResponse.status === 200 || userResponse.status == 201) {
+      const userData = userResponse.data;
+      const orderId = uuid.v4();
+      const newOrder = new Order({
+        orderId,
+        date,
+        customer: {
+          userId,
+          username: userData.username,
+          email: userData.email,
+          name: userData.username,
+        },
+        order,
+        status,
+        items,
+        delivery_address,
+        billing_address,
+        phone,
+        payment,
+        total,
+      });
 
-    const savedOrder = await newOrder.save();
-    res.status(201).json(savedOrder);
-    console.log("New order created:", savedOrder);
+      const savedOrder = await newOrder.save();
+      console.log("Saved order:", savedOrder);
+      res.status(201).json(savedOrder);
+      console.log("New order created:", savedOrder);
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });

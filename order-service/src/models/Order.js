@@ -24,7 +24,7 @@ const orderSchema = new Schema({
   status: { type: String, required: true },
   order: [
     {
-      id: { type: String, required: true },
+      _id: { type: String, required: true },
       name: { type: String, required: true },
       quantity: { type: Number, required: true },
       price: { type: Number, required: true },
