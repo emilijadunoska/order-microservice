@@ -42,6 +42,51 @@ const fetchBookInformation = async (bookId) => {
   }
 };
 
+const getTotalOrderPrice = async () => {
+  try {
+    const orders = await Order.find();
+    const totalPrice = orders.reduce((total, order) => {
+      const orderTotal = parseFloat(order.total);
+      if (!isNaN(orderTotal)) {
+        return total + orderTotal;
+      } else {
+        console.warn(
+          `Skipping order ${order.orderId} with undefined or non-numeric total`
+        );
+        return total;
+      }
+    }, 0);
+
+    console.log("Total Price:", totalPrice);
+    return { totalPrice };
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+};
+
+// Function to cancel a specific order by order ID
+const cancelOrderById = async (orderId) => {
+  try {
+    console.log("Canceling order with ID:", orderId);
+
+    const updatedOrder = await Order.findOneAndUpdate(
+      { orderId },
+      { $set: { status: "Cancelled" } },
+      { new: true }
+    );
+
+    if (!updatedOrder) {
+      throw new Error("Order not found for cancellation");
+    }
+
+    return updatedOrder;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+};
+
 /**
  * @swagger
  * /api/orders:
@@ -325,6 +370,66 @@ router.put("/orders/orderId/:orderId/status", async (req, res) => {
 
     res.status(200).json(updatedOrder);
     console.log("Order status updated:", updatedOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * @swagger
+ * /api/orders/total-price:
+ *   get:
+ *     summary: Get the total price of all orders
+ *     tags: [Orders]
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             example: {"totalPrice": 1500}
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/orders/total-price", async (req, res) => {
+  try {
+    const totalPrice = await getTotalOrderPrice();
+    res.status(200).json(totalPrice);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * @swagger
+ * /api/orders/orderId/{orderId}/cancel:
+ *   put:
+ *     summary: Cancel a specific order by order ID
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         description: ID of the order
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order cancelled successfully
+ *         content:
+ *           application/json:
+ *             example: {"orderId": "1", "status": "Cancelled", ...}
+ *       404:
+ *         description: Order not found for cancellation
+ *       500:
+ *         description: Internal server error
+ */
+router.put("/orders/orderId/:orderId/cancel", async (req, res) => {
+  try {
+    const orderId = req.params.orderId;
+    const cancelledOrder = await cancelOrderById(orderId);
+    res.status(200).json(cancelledOrder);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
