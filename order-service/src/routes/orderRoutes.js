@@ -9,7 +9,27 @@ const router = express.Router();
 const uuid = require("uuid");
 const axios = require("axios");
 const Order = require("../models/Order");
+const jwt = require("jsonwebtoken");
 const { USER_SERVICE, CATALOG_SERVICE } = require("../../Constants");
+
+const secretKey = "sua_jwt-test";
+
+const jwtAuthenticationRequired = (req, res, next) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).json({ error: "Missing access token" });
+  }
+
+  try {
+    const payload = jwt.verify(token.split(" ")[1], secretKey);
+    req.user_identity = payload;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+};
+
 
 // make a call to user serviced to get user information about the order
 const fetchUserInformation = async (userId) => {
@@ -99,7 +119,8 @@ const cancelOrderById = async (orderId) => {
  *           application/json:
  *             example: [{"orderId": "1", ...}]
  */
-router.get("/orders", async (req, res) => {
+
+router.get("/orders", jwtAuthenticationRequired, async (req, res) => {
   try {
     const orders = await Order.find();
     res.status(200).json(orders);
@@ -132,7 +153,7 @@ router.get("/orders", async (req, res) => {
  *       404:
  *         description: Order not found
  */
-router.get("/orders/orderId/:orderId", async (req, res) => {
+router.get("/orders/orderId/:orderId", jwtAuthenticationRequired, async (req, res) => {
   try {
     const orderId = req.params.orderId;
     const order = await Order.find({ orderId: orderId });
@@ -172,7 +193,7 @@ router.get("/orders/orderId/:orderId", async (req, res) => {
  *       404:
  *         description: No orders found for the user
  */
-router.get("/orders/user/:userId", async (req, res) => {
+router.get("/orders/user/:userId", jwtAuthenticationRequired, async (req, res) => {
   try {
     const userId = req.params.userId;
 
@@ -213,7 +234,7 @@ router.get("/orders/user/:userId", async (req, res) => {
  */
 
 // create an order
-router.post("/order", async (req, res) => {
+router.post("/order", jwtAuthenticationRequired, async (req, res) => {
   try {
     const {
       date,
@@ -352,7 +373,7 @@ router.delete("/orders/orderId/:orderId", async (req, res) => {
  *       404:
  *         description: Order not found for status update
  */
-router.put("/orders/orderId/:orderId/status", async (req, res) => {
+router.put("/orders/orderId/:orderId/status", jwtAuthenticationRequired, async (req, res) => {
   try {
     const orderId = req.params.orderId;
     const newStatus = req.body.status;
@@ -391,7 +412,7 @@ router.put("/orders/orderId/:orderId/status", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get("/orders/total-price", async (req, res) => {
+router.get("/orders/total-price", jwtAuthenticationRequired, async (req, res) => {
   try {
     const totalPrice = await getTotalOrderPrice();
     res.status(200).json(totalPrice);
@@ -425,7 +446,7 @@ router.get("/orders/total-price", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.put("/orders/orderId/:orderId/cancel", async (req, res) => {
+router.put("/orders/orderId/:orderId/cancel", jwtAuthenticationRequired, async (req, res) => {
   try {
     const orderId = req.params.orderId;
     const cancelledOrder = await cancelOrderById(orderId);
