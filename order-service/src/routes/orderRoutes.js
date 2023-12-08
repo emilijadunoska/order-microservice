@@ -9,23 +9,7 @@ const router = express.Router();
 const uuid = require("uuid");
 const axios = require("axios");
 const Order = require("../models/Order");
-const { USER_SERVICE, CATALOG_SERVICE } = require("../../Constants");
-
-// make a call to user serviced to get user information about the order
-const fetchUserInformation = async (userId) => {
-  try {
-    const response = await axios.get(`${USER_SERVICE}/users/${userId}`);
-
-    if (response.status !== 200) {
-      throw new Error(`Failed to fetch user information for user ${userId}`);
-    }
-
-    return { status: response.status, data: response.data };
-  } catch (error) {
-    console.error(error);
-    throw error;
-  }
-};
+const { CATALOG_SERVICE } = require("../../Constants");
 
 // make a call to catalog service to get book information for the order
 const fetchBookInformation = async (bookId) => {
@@ -228,54 +212,42 @@ router.post("/order", async (req, res) => {
       total,
     } = req.body;
 
-    const userId = customer.userId;
-    const userResponse = await fetchUserInformation(userId);
+    const orderItems = await Promise.all(
+      order.map(async (item) => {
+        const bookInfoResponse = await fetchBookInformation(item._id);
+        if (bookInfoResponse.status === 200) {
+          const bookData = bookInfoResponse.data;
+          return {
+            _id: item._id,
+            name: bookData.name,
+            price: bookData.price,
+            quantity: item.quantity,
+          };
+        } else {
+          throw new Error(
+            `Failed to fetch book information for book ${item._id}`
+          );
+        }
+      })
+    );
 
-    if (userResponse.status === 200 || userResponse.status == 201) {
-      const userData = userResponse.data;
-
-      const orderItems = await Promise.all(
-        order.map(async (item) => {
-          const bookInfoResponse = await fetchBookInformation(item._id);
-          if (bookInfoResponse.status === 200) {
-            const bookData = bookInfoResponse.data;
-            return {
-              _id: item._id,
-              name: bookData.name,
-              price: bookData.price,
-              quantity: item.quantity,
-            };
-          } else {
-            throw new Error(
-              `Failed to fetch book information for book ${item._id}`
-            );
-          }
-        })
-      );
-
-      const orderId = uuid.v4();
-      const newOrder = new Order({
-        orderId,
-        date,
-        customer: {
-          userId,
-          username: userData.username,
-          email: userData.email,
-          name: userData.username,
-        },
-        order: orderItems,
-        status,
-        items: orderItems,
-        delivery_address,
-        billing_address,
-        phone,
-        payment,
-        total,
-      });
-      const savedOrder = await newOrder.save();
-      res.status(201).json(savedOrder);
-      console.log("New order created:", savedOrder);
-    }
+    const orderId = uuid.v4();
+    const newOrder = new Order({
+      orderId,
+      date,
+      customer,
+      order: orderItems,
+      status,
+      items: orderItems,
+      delivery_address,
+      billing_address,
+      phone,
+      payment,
+      total,
+    });
+    const savedOrder = await newOrder.save();
+    res.status(201).json(savedOrder);
+    console.log("New order created:", savedOrder);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
