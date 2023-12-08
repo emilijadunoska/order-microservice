@@ -110,6 +110,7 @@ const fetchBooksByCategory = async (category) => {
  *       404:
  *         description: No recommendations found for the user
  */
+
 router.get("/recommendations/user/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -120,8 +121,48 @@ router.get("/recommendations/user/:userId", async (req, res) => {
       return;
     }
 
-    res.status(200).json(recommendations);
-    console.log("Recommendations for user:", recommendations);
+    const bookIds = recommendations.map(
+      (recommendation) => recommendation.bookId
+    );
+
+    const books = await Promise.all(
+      bookIds.map(async (bookId) => {
+        try {
+          const bookResponse = await axios.get(
+            `${CATALOG_SERVICE}/books/${bookId}`
+          );
+          return bookResponse.data;
+        } catch (error) {
+          console.error("Error fetching book details:", error.message);
+          return null;
+        }
+      })
+    );
+
+    const availableBooks = books
+      .filter((book) => book !== null)
+      .map((book) => JSON.parse(book));
+
+    if (availableBooks.length === 0) {
+      res.status(404).json({ error: "No books found for recommendations" });
+      return;
+    }
+
+    const category = availableBooks[0].category;
+
+    if (!category) {
+      res.status(500).json({ error: "Category not found for the book" });
+      return;
+    }
+
+    const categoryBooks = await fetchBooksByCategory(category);
+
+    res.status(200).json({ recommendations, categoryBooks });
+    console.log(
+      "Recommendations and Category Books for user:",
+      recommendations,
+      categoryBooks
+    );
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
