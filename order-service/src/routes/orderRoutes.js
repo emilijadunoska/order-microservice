@@ -30,23 +30,6 @@ const jwtAuthenticationRequired = (req, res, next) => {
   }
 };
 
-
-// make a call to user serviced to get user information about the order
-const fetchUserInformation = async (userId) => {
-  try {
-    const response = await axios.get(`${USER_SERVICE}/users/${userId}`);
-
-    if (response.status !== 200) {
-      throw new Error(`Failed to fetch user information for user ${userId}`);
-    }
-
-    return { status: response.status, data: response.data };
-  } catch (error) {
-    console.error(error);
-    throw error;
-  }
-};
-
 // make a call to catalog service to get book information for the order
 const fetchBookInformation = async (bookId) => {
   try {
@@ -153,23 +136,27 @@ router.get("/orders", jwtAuthenticationRequired, async (req, res) => {
  *       404:
  *         description: Order not found
  */
-router.get("/orders/orderId/:orderId", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const order = await Order.find({ orderId: orderId });
+router.get(
+  "/orders/orderId/:orderId",
+  jwtAuthenticationRequired,
+  async (req, res) => {
+    try {
+      const orderId = req.params.orderId;
+      const order = await Order.find({ orderId: orderId });
 
-    if (!order) {
-      res.status(404).json({ error: "Order not found" });
-      return;
+      if (!order) {
+        res.status(404).json({ error: "Order not found" });
+        return;
+      }
+
+      res.status(200).json(order);
+      console.log("Order:", order);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(order);
-    console.log("Order:", order);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
   }
-});
+);
 
 /**
  * @swagger
@@ -193,24 +180,28 @@ router.get("/orders/orderId/:orderId", jwtAuthenticationRequired, async (req, re
  *       404:
  *         description: No orders found for the user
  */
-router.get("/orders/user/:userId", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const userId = req.params.userId;
+router.get(
+  "/orders/user/:userId",
+  jwtAuthenticationRequired,
+  async (req, res) => {
+    try {
+      const userId = req.params.userId;
 
-    const orders = await Order.find({ "customer.userId": userId });
+      const orders = await Order.find({ "customer.userId": userId });
 
-    if (!orders || orders.length === 0) {
-      res.status(404).json({ error: "No orders found for the user" });
-      return;
+      if (!orders || orders.length === 0) {
+        res.status(404).json({ error: "No orders found for the user" });
+        return;
+      }
+
+      res.status(200).json(orders);
+      console.log("Orders for user:", orders);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(orders);
-    console.log("Orders for user:", orders);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
   }
-});
+);
 
 /**
  * @swagger
@@ -234,7 +225,7 @@ router.get("/orders/user/:userId", jwtAuthenticationRequired, async (req, res) =
  */
 
 // create an order
-router.post("/order", jwtAuthenticationRequired, async (req, res) => {
+router.post("/order", async (req, res) => {
   try {
     const {
       date,
@@ -249,54 +240,42 @@ router.post("/order", jwtAuthenticationRequired, async (req, res) => {
       total,
     } = req.body;
 
-    const userId = customer.userId;
-    const userResponse = await fetchUserInformation(userId);
+    const orderItems = await Promise.all(
+      order.map(async (item) => {
+        const bookInfoResponse = await fetchBookInformation(item._id);
+        if (bookInfoResponse.status === 200) {
+          const bookData = bookInfoResponse.data;
+          return {
+            _id: item._id,
+            name: bookData.name,
+            price: bookData.price,
+            quantity: item.quantity,
+          };
+        } else {
+          throw new Error(
+            `Failed to fetch book information for book ${item._id}`
+          );
+        }
+      })
+    );
 
-    if (userResponse.status === 200 || userResponse.status == 201) {
-      const userData = userResponse.data;
-
-      const orderItems = await Promise.all(
-        order.map(async (item) => {
-          const bookInfoResponse = await fetchBookInformation(item._id);
-          if (bookInfoResponse.status === 200) {
-            const bookData = bookInfoResponse.data;
-            return {
-              _id: item._id,
-              name: bookData.name,
-              price: bookData.price,
-              quantity: item.quantity,
-            };
-          } else {
-            throw new Error(
-              `Failed to fetch book information for book ${item._id}`
-            );
-          }
-        })
-      );
-
-      const orderId = uuid.v4();
-      const newOrder = new Order({
-        orderId,
-        date,
-        customer: {
-          userId,
-          username: userData.username,
-          email: userData.email,
-          name: userData.username,
-        },
-        order: orderItems,
-        status,
-        items: orderItems,
-        delivery_address,
-        billing_address,
-        phone,
-        payment,
-        total,
-      });
-      const savedOrder = await newOrder.save();
-      res.status(201).json(savedOrder);
-      console.log("New order created:", savedOrder);
-    }
+    const orderId = uuid.v4();
+    const newOrder = new Order({
+      orderId,
+      date,
+      customer,
+      order: orderItems,
+      status,
+      items: orderItems,
+      delivery_address,
+      billing_address,
+      phone,
+      payment,
+      total,
+    });
+    const savedOrder = await newOrder.save();
+    res.status(201).json(savedOrder);
+    console.log("New order created:", savedOrder);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal server error" });
@@ -325,26 +304,30 @@ router.post("/order", jwtAuthenticationRequired, async (req, res) => {
  *       404:
  *         description: Order not found for deletion
  */
-router.delete("/orders/orderId/:orderId", async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
+router.delete(
+  "/orders/orderId/:orderId",
+  jwtAuthenticationRequired,
+  async (req, res) => {
+    try {
+      const orderId = req.params.orderId;
 
-    const deletedOrder = await Order.findOneAndDelete({ orderId });
+      const deletedOrder = await Order.findOneAndDelete({ orderId });
 
-    if (!deletedOrder) {
-      res.status(404).json({ error: "Order not found for deletion" });
-      return;
+      if (!deletedOrder) {
+        res.status(404).json({ error: "Order not found for deletion" });
+        return;
+      }
+
+      res
+        .status(200)
+        .json({ message: "Order deleted successfully", deletedOrder });
+      console.log("Order deleted:", deletedOrder);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res
-      .status(200)
-      .json({ message: "Order deleted successfully", deletedOrder });
-    console.log("Order deleted:", deletedOrder);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
   }
-});
+);
 
 /**
  * @swagger
@@ -373,29 +356,33 @@ router.delete("/orders/orderId/:orderId", async (req, res) => {
  *       404:
  *         description: Order not found for status update
  */
-router.put("/orders/orderId/:orderId/status", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const newStatus = req.body.status;
+router.put(
+  "/orders/orderId/:orderId/status",
+  jwtAuthenticationRequired,
+  async (req, res) => {
+    try {
+      const orderId = req.params.orderId;
+      const newStatus = req.body.status;
 
-    const updatedOrder = await Order.findOneAndUpdate(
-      { orderId },
-      { $set: { status: newStatus } },
-      { new: true }
-    );
+      const updatedOrder = await Order.findOneAndUpdate(
+        { orderId },
+        { $set: { status: newStatus } },
+        { new: true }
+      );
 
-    if (!updatedOrder) {
-      res.status(404).json({ error: "Order not found for status update" });
-      return;
+      if (!updatedOrder) {
+        res.status(404).json({ error: "Order not found for status update" });
+        return;
+      }
+
+      res.status(200).json(updatedOrder);
+      console.log("Order status updated:", updatedOrder);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(updatedOrder);
-    console.log("Order status updated:", updatedOrder);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
   }
-});
+);
 
 /**
  * @swagger
@@ -412,15 +399,19 @@ router.put("/orders/orderId/:orderId/status", jwtAuthenticationRequired, async (
  *       500:
  *         description: Internal server error
  */
-router.get("/orders/total-price", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const totalPrice = await getTotalOrderPrice();
-    res.status(200).json(totalPrice);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+router.get(
+  "/orders/total-price",
+  jwtAuthenticationRequired,
+  async (req, res) => {
+    try {
+      const totalPrice = await getTotalOrderPrice();
+      res.status(200).json(totalPrice);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
-});
+);
 
 /**
  * @swagger
@@ -446,15 +437,19 @@ router.get("/orders/total-price", jwtAuthenticationRequired, async (req, res) =>
  *       500:
  *         description: Internal server error
  */
-router.put("/orders/orderId/:orderId/cancel", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const cancelledOrder = await cancelOrderById(orderId);
-    res.status(200).json(cancelledOrder);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+router.put(
+  "/orders/orderId/:orderId/cancel",
+  jwtAuthenticationRequired,
+  async (req, res) => {
+    try {
+      const orderId = req.params.orderId;
+      const cancelledOrder = await cancelOrderById(orderId);
+      res.status(200).json(cancelledOrder);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
-});
+);
 
 module.exports = router;
