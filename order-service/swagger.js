@@ -9,6 +9,20 @@ const options = {
       version: "1.0.0",
       description: "Documentation for Order Service API",
     },
+    security: [
+      {
+        BearerAuth: [],
+      },
+    ],
+    components: {
+      securitySchemes: {
+        BearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
   },
   apis: ["./src/routes/orderRoutes.js"],
 };

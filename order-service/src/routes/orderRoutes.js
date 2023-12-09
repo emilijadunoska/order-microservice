@@ -3,32 +3,19 @@
  * tags:
  *   name: Orders
  *   description: API operations for managing orders
+ * securitySchemes:
+ *   BearerAuth:
+ *     type: apiKey
+ *     in: header
+ *     name: Authorization
  */
 const express = require("express");
 const router = express.Router();
 const uuid = require("uuid");
 const axios = require("axios");
 const Order = require("../models/Order");
-const jwt = require("jsonwebtoken");
-const { USER_SERVICE, CATALOG_SERVICE } = require("../../Constants");
-
-const secretKey = "sua_jwt-test";
-
-const jwtAuthenticationRequired = (req, res, next) => {
-  const token = req.headers.authorization;
-
-  if (!token) {
-    return res.status(401).json({ error: "Missing access token" });
-  }
-
-  try {
-    const payload = jwt.verify(token.split(" ")[1], secretKey);
-    req.user_identity = payload;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: "Invalid token" });
-  }
-};
+const { CATALOG_SERVICE } = require("../../Constants");
+const { jwtAuthenticationRequired } = require("../../authMiddleware");
 
 // make a call to catalog service to get book information for the order
 const fetchBookInformation = async (bookId) => {
@@ -95,6 +82,8 @@ const cancelOrderById = async (orderId) => {
  * /api/orders:
  *   get:
  *     summary: Get all orders
+ *     security:
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Successful response
@@ -127,6 +116,8 @@ router.get("/orders", jwtAuthenticationRequired, async (req, res) => {
  *         description: ID of the order
  *         schema:
  *           type: string
+ *     security:
+ *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Successful response
@@ -225,7 +216,7 @@ router.get(
  */
 
 // create an order
-router.post("/order", async (req, res) => {
+router.post("/order", jwtAuthenticationRequired, async (req, res) => {
   try {
     const {
       date,
