@@ -16,6 +16,7 @@ const axios = require("axios");
 const Order = require("../models/Order");
 const { CATALOG_SERVICE } = require("../../Constants");
 const { jwtAuthenticationRequired } = require("../../authMiddleware");
+const { logEventMiddleware } = require("../../messaging");
 
 // make a call to catalog service to get book information for the order
 const fetchBookInformation = async (bookId) => {
@@ -55,7 +56,6 @@ const getTotalOrderPrice = async () => {
   }
 };
 
-// Function to cancel a specific order by order ID
 const cancelOrderById = async (orderId) => {
   try {
     console.log("Canceling order with ID:", orderId);
@@ -92,16 +92,32 @@ const cancelOrderById = async (orderId) => {
  *             example: [{"orderId": "1", ...}]
  */
 
-router.get("/orders", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const orders = await Order.find();
-    res.status(200).json(orders);
-    console.log("orders: ", orders);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+router.get(
+  "/orders",
+  jwtAuthenticationRequired,
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const orders = await Order.find();
+      res.status(200).json(orders);
+      console.log("orders: ", orders);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Warning",
+        "Error"
+      );
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
-});
+);
 
 /**
  * @swagger
@@ -130,20 +146,58 @@ router.get("/orders", jwtAuthenticationRequired, async (req, res) => {
 router.get(
   "/orders/orderId/:orderId",
   jwtAuthenticationRequired,
+  logEventMiddleware,
   async (req, res) => {
     try {
       const orderId = req.params.orderId;
-      const order = await Order.find({ orderId: orderId });
+      const orders = await Order.find({ orderId: orderId });
 
-      if (!order) {
+      if (orders.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "Order not found"
+        );
+
         res.status(404).json({ error: "Order not found" });
         return;
       }
 
-      res.status(200).json(order);
-      console.log("Order:", order);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Info",
+        "Incoming request"
+      );
+
+      res.status(200).json(orders);
+      console.log("Orders:", orders);
     } catch (error) {
       console.error(error);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -174,6 +228,7 @@ router.get(
 router.get(
   "/orders/user/:userId",
   jwtAuthenticationRequired,
+  logEventMiddleware,
   async (req, res) => {
     try {
       const userId = req.params.userId;
@@ -181,14 +236,51 @@ router.get(
       const orders = await Order.find({ "customer.userId": userId });
 
       if (!orders || orders.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No orders found for the user"
+        );
+
         res.status(404).json({ error: "No orders found for the user" });
         return;
       }
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Info",
+        "Incoming request"
+      );
 
       res.status(200).json(orders);
       console.log("Orders for user:", orders);
     } catch (error) {
       console.error(error);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -216,62 +308,107 @@ router.get(
  */
 
 // create an order
-router.post("/order", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const {
-      date,
-      customer,
-      order,
-      status,
-      items,
-      delivery_address,
-      billing_address,
-      phone,
-      payment,
-      total,
-    } = req.body;
+router.post(
+  "/order",
+  jwtAuthenticationRequired,
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const {
+        date,
+        customer,
+        order,
+        status,
+        items,
+        delivery_address,
+        billing_address,
+        phone,
+        payment,
+        total,
+      } = req.body;
 
-    const orderItems = await Promise.all(
-      order.map(async (item) => {
-        const bookInfoResponse = await fetchBookInformation(item._id);
-        if (bookInfoResponse.status === 200) {
-          const bookData = bookInfoResponse.data;
-          return {
-            _id: item._id,
-            name: bookData.name,
-            price: bookData.price,
-            quantity: item.quantity,
-          };
-        } else {
-          throw new Error(
-            `Failed to fetch book information for book ${item._id}`
-          );
-        }
-      })
-    );
+      const orderItems = await Promise.all(
+        order.map(async (item) => {
+          const bookInfoResponse = await fetchBookInformation(item._id);
+          if (bookInfoResponse.status === 200) {
+            const bookData = bookInfoResponse.data;
+            return {
+              _id: item._id,
+              name: bookData.name,
+              price: bookData.price,
+              quantity: item.quantity,
+            };
+          } else {
+            throw new Error(
+              `Failed to fetch book information for book ${item._id}`
+            );
+          }
+        })
+      );
 
-    const orderId = uuid.v4();
-    const newOrder = new Order({
-      orderId,
-      date,
-      customer,
-      order: orderItems,
-      status,
-      items: orderItems,
-      delivery_address,
-      billing_address,
-      phone,
-      payment,
-      total,
-    });
-    const savedOrder = await newOrder.save();
-    res.status(201).json(savedOrder);
-    console.log("New order created:", savedOrder);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+      if (!orderItems || orderItems.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No items found in the order"
+        );
+
+        res.status(400).json({ error: "No items found in the order" });
+        return;
+      }
+
+      const orderId = uuid.v4();
+      const newOrder = new Order({
+        orderId,
+        date,
+        customer,
+        order: orderItems,
+        status,
+        items: orderItems,
+        delivery_address,
+        billing_address,
+        phone,
+        payment,
+        total,
+      });
+      const savedOrder = await newOrder.save();
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Info",
+        "New order created"
+      );
+      res.status(201).json(savedOrder);
+      console.log("New order created:", savedOrder);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
-});
+);
 
 /**
  * @swagger
@@ -298,6 +435,7 @@ router.post("/order", jwtAuthenticationRequired, async (req, res) => {
 router.delete(
   "/orders/orderId/:orderId",
   jwtAuthenticationRequired,
+  logEventMiddleware,
   async (req, res) => {
     try {
       const orderId = req.params.orderId;
@@ -305,6 +443,18 @@ router.delete(
       const deletedOrder = await Order.findOneAndDelete({ orderId });
 
       if (!deletedOrder) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "Order not found for deletion"
+        );
+
         res.status(404).json({ error: "Order not found for deletion" });
         return;
       }
@@ -315,6 +465,19 @@ router.delete(
       console.log("Order deleted:", deletedOrder);
     } catch (error) {
       console.error(error);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -350,6 +513,7 @@ router.delete(
 router.put(
   "/orders/orderId/:orderId/status",
   jwtAuthenticationRequired,
+  logEventMiddleware,
   async (req, res) => {
     try {
       const orderId = req.params.orderId;
@@ -362,6 +526,18 @@ router.put(
       );
 
       if (!updatedOrder) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "Order not found for status update"
+        );
+
         res.status(404).json({ error: "Order not found for status update" });
         return;
       }
@@ -370,6 +546,19 @@ router.put(
       console.log("Order status updated:", updatedOrder);
     } catch (error) {
       console.error(error);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -393,12 +582,38 @@ router.put(
 router.get(
   "/orders/total-price",
   jwtAuthenticationRequired,
+  logEventMiddleware,
   async (req, res) => {
     try {
       const totalPrice = await getTotalOrderPrice();
       res.status(200).json(totalPrice);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Info",
+        "Successful request for total price"
+      );
     } catch (error) {
       console.error(error);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Warning",
+        "Internal server error"
+      );
+
       res.status(500).json({ error: "Internal server error" });
     }
   }
@@ -431,13 +646,40 @@ router.get(
 router.put(
   "/orders/orderId/:orderId/cancel",
   jwtAuthenticationRequired,
+  logEventMiddleware,
   async (req, res) => {
     try {
       const orderId = req.params.orderId;
       const cancelledOrder = await cancelOrderById(orderId);
+
       res.status(200).json(cancelledOrder);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Info",
+        "Order cancelled successfully"
+      );
     } catch (error) {
       console.error(error);
+
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Warning",
+        "Internal server error during order cancellation"
+      );
+
       res.status(500).json({ error: "Internal server error" });
     }
   }
