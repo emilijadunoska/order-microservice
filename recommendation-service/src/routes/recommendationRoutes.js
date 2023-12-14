@@ -8,6 +8,7 @@ const express = require("express");
 const router = express.Router();
 const uuid = require("uuid");
 const axios = require("axios");
+const { jwtAuthenticationRequired } = require("../../authMiddleware");
 
 const Recommendation = require("../models/Recommendation");
 const { CATALOG_SERVICE } = require("../../Constants");
@@ -111,7 +112,7 @@ const fetchBooksByCategory = async (category) => {
  *         description: No recommendations found for the user
  */
 
-router.get("/recommendations/user/:userId", async (req, res) => {
+router.get("/recommendations/user/:userId", jwtAuthenticationRequired, async (req, res) => {
   try {
     const userId = req.params.userId;
     const recommendations = await Recommendation.find({ userId });
@@ -319,7 +320,7 @@ router.get("/recommendations/non-fiction", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post("/recommendations", async (req, res) => {
+router.post("/recommendations", jwtAuthenticationRequired, async (req, res) => {
   try {
     const { userId, bookId, type } = req.body;
 
@@ -362,7 +363,7 @@ router.post("/recommendations", async (req, res) => {
  *       404:
  *         description: Recommendations not found for deletion
  */
-router.delete("/recommendations/:userId", async (req, res) => {
+router.delete("/recommendations/:userId", jwtAuthenticationRequired, async (req, res) => {
   try {
     const userId = req.params.userId;
 

@@ -5,7 +5,7 @@ const connectDB = require("./config/database");
 const { specs, swaggerUi } = require("./swagger");
 
 const app = express();
-const port = 5001;
+const port = process.env.port || 11154;
 
 const corsOptions = {
   origin: "*",
@@ -26,5 +26,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log("Server is running on http://localhost:${port}");
+  console.log(`Server is running on port: http://localhost:${port}`);
 });
