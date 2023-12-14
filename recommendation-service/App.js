@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/database");
+const messaging = require("./messaging");
+const uuid = require("uuid");
 
 const { specs, swaggerUi } = require("./swagger");
 
@@ -12,6 +14,12 @@ const corsOptions = {
   credentials: true,
 };
 
+messaging.setupRabbitMQ(
+  "amqp://student:student123@studentdocker.informatika.uni-mb.si:5672",
+  "rv1_sipia_4",
+  "rv1_sipia_4"
+);
+
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
@@ -21,8 +29,12 @@ connectDB();
 const recommendationRoutes = require("./src/routes/recommendationRoutes");
 app.use("/api", recommendationRoutes);
 
-app.get("/", (req, res) => {
-  res.send("Hello, this is your order service! ");
+app.get("/", async (req, res) => {
+  const correlationId = req.correlationId;
+  messaging.logEvent("Info", "Request to the root endpoint.", req);
+  res.send(
+    `Hello, this is your recommendation service! Correlation ID: ${correlationId}`
+  );
 });
 
 app.listen(port, () => {
