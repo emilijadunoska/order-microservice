@@ -9,6 +9,7 @@ const router = express.Router();
 const uuid = require("uuid");
 const axios = require("axios");
 const { jwtAuthenticationRequired } = require("../../authMiddleware");
+const { logEventMiddleware } = require("../../messaging");
 
 const Recommendation = require("../models/Recommendation");
 const { CATALOG_SERVICE } = require("../../Constants");
@@ -94,6 +95,8 @@ const fetchBooksByCategory = async (category) => {
  * /api/recommendations/user/{userId}:
  *   get:
  *     summary: Get recommendations for a user by user ID
+ *     security:
+ *       - BearerAuth: []
  *     tags: [Recommendations]
  *     parameters:
  *       - in: path
@@ -112,63 +115,121 @@ const fetchBooksByCategory = async (category) => {
  *         description: No recommendations found for the user
  */
 
-router.get("/recommendations/user/:userId", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const userId = req.params.userId;
-    const recommendations = await Recommendation.find({ userId });
+router.get("/recommendations/user/:userId",
+  jwtAuthenticationRequired,
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const recommendations = await Recommendation.find({ userId });
 
-    if (!recommendations || recommendations.length === 0) {
-      res.status(404).json({ error: "No recommendations found for the user" });
-      return;
+      if (!recommendations || recommendations.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No recommendations found for the user"
+        );
+        res.status(404).json({ error: "No recommendations found for the user" });
+        return;
+      }
+
+      const bookIds = recommendations.map(
+        (recommendation) => recommendation.bookId
+      );
+
+      const books = await Promise.all(
+        bookIds.map(async (bookId) => {
+          try {
+            const bookResponse = await axios.get(
+              `${CATALOG_SERVICE}/books/${bookId}`
+            );
+            return bookResponse.data;
+          } catch (error) {
+            await logEventMiddleware(
+              req,
+              res,
+              (err) => {
+                if (err) {
+                  console.error("Error logging event:", err);
+                }
+              },
+              "Error",
+              "Error fetching book details"
+            );
+            console.error("Error fetching book details:", error.message);
+            return null;
+          }
+        })
+      );
+
+      const availableBooks = books
+        .filter((book) => book !== null)
+        .map((book) => JSON.parse(book));
+
+      if (availableBooks.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No books found for recommendations"
+        );
+        res.status(404).json({ error: "No books found for recommendations" });
+        return;
+      }
+
+      const category = availableBooks[0].category;
+
+      if (!category) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "Category not found for the book"
+        );
+        res.status(500).json({ error: "Category not found for the book" });
+        return;
+      }
+
+      const categoryBooks = await fetchBooksByCategory(category);
+
+      res.status(200).json({ recommendations, categoryBooks });
+      console.log(
+        "Recommendations and Category Books for user:",
+        recommendations,
+        categoryBooks
+      );
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    const bookIds = recommendations.map(
-      (recommendation) => recommendation.bookId
-    );
-
-    const books = await Promise.all(
-      bookIds.map(async (bookId) => {
-        try {
-          const bookResponse = await axios.get(
-            `${CATALOG_SERVICE}/books/${bookId}`
-          );
-          return bookResponse.data;
-        } catch (error) {
-          console.error("Error fetching book details:", error.message);
-          return null;
-        }
-      })
-    );
-
-    const availableBooks = books
-      .filter((book) => book !== null)
-      .map((book) => JSON.parse(book));
-
-    if (availableBooks.length === 0) {
-      res.status(404).json({ error: "No books found for recommendations" });
-      return;
-    }
-
-    const category = availableBooks[0].category;
-
-    if (!category) {
-      res.status(500).json({ error: "Category not found for the book" });
-      return;
-    }
-
-    const categoryBooks = await fetchBooksByCategory(category);
-
-    res.status(200).json({ recommendations, categoryBooks });
-    console.log(
-      "Recommendations and Category Books for user:",
-      recommendations,
-      categoryBooks
-    );
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  });
 
 /**
  * @swagger
@@ -185,22 +246,46 @@ router.get("/recommendations/user/:userId", jwtAuthenticationRequired, async (re
  *       404:
  *         description: No popular recommendations found
  */
-router.get("/recommendations/popular", async (req, res) => {
-  try {
-    const highRatedBooks = await fetchPopularBooks();
+router.get("/recommendations/popular",
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const highRatedBooks = await fetchPopularBooks();
 
-    if (!highRatedBooks || highRatedBooks.length === 0) {
-      res.status(404).json({ error: "No popular recommendations found" });
-      return;
+      if (!highRatedBooks || highRatedBooks.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No popular recommendations found"
+        );
+        res.status(404).json({ error: "No popular recommendations found" });
+        return;
+      }
+
+      res.status(200).json(highRatedBooks);
+      console.log("Popular recommendations:", highRatedBooks);
+    } catch (error) {
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(highRatedBooks);
-    console.log("Popular recommendations:", highRatedBooks);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  });
 
 /**
  * @swagger
@@ -217,22 +302,46 @@ router.get("/recommendations/popular", async (req, res) => {
  *       404:
  *         description: No new arrivals recommendations found
  */
-router.get("/recommendations/new-arrivals", async (req, res) => {
-  try {
-    const newArrivalBooks = await fetchNewArrivalBooks();
+router.get("/recommendations/new-arrivals",
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const newArrivalBooks = await fetchNewArrivalBooks();
 
-    if (!newArrivalBooks || newArrivalBooks.length === 0) {
-      res.status(404).json({ error: "No new arrivals recommendations found" });
-      return;
+      if (!newArrivalBooks || newArrivalBooks.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No new arrivals recommendations found"
+        );
+        res.status(404).json({ error: "No new arrivals recommendations found" });
+        return;
+      }
+
+      res.status(200).json(newArrivalBooks);
+      console.log("New arrivals recommendations:", newArrivalBooks);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(newArrivalBooks);
-    console.log("New arrivals recommendations:", newArrivalBooks);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  });
 
 /**
  * @swagger
@@ -249,22 +358,46 @@ router.get("/recommendations/new-arrivals", async (req, res) => {
  *       404:
  *         description: No fiction book recommendations found
  */
-router.get("/recommendations/fiction", async (req, res) => {
-  try {
-    const fictionBooks = await fetchBooksByCategory("fiction");
+router.get("/recommendations/fiction",
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const fictionBooks = await fetchBooksByCategory("fiction");
 
-    if (!fictionBooks || fictionBooks.length === 0) {
-      res.status(404).json({ error: "No fiction book recommendations found" });
-      return;
+      if (!fictionBooks || fictionBooks.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No fiction book recommendations found"
+        );
+        res.status(404).json({ error: "No fiction book recommendations found" });
+        return;
+      }
+
+      res.status(200).json(fictionBooks);
+      console.log("Fiction book recommendations:", fictionBooks);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(fictionBooks);
-    console.log("Fiction book recommendations:", fictionBooks);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  });
 
 /**
  * @swagger
@@ -281,30 +414,53 @@ router.get("/recommendations/fiction", async (req, res) => {
  *       404:
  *         description: No non-fiction book recommendations found
  */
-router.get("/recommendations/non-fiction", async (req, res) => {
-  try {
-    const nonFictionBooks = await fetchBooksByCategory("non-fiction");
+router.get("/recommendations/non-fiction",
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const nonFictionBooks = await fetchBooksByCategory("non-fiction");
+      if (!nonFictionBooks || nonFictionBooks.length === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Warning",
+          "No non-fiction book recommendations found"
+        );
+        res.status(404).json({ error: "No non-fiction book recommendations found" });
+        return;
+      }
 
-    if (!nonFictionBooks || nonFictionBooks.length === 0) {
-      res
-        .status(404)
-        .json({ error: "No non-fiction book recommendations found" });
-      return;
+      res.status(200).json(nonFictionBooks);
+      console.log("Non-fiction book recommendations:", nonFictionBooks);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(nonFictionBooks);
-    console.log("Non-fiction book recommendations:", nonFictionBooks);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  });
 
 /**
  * @swagger
  * /api/recommendations:
  *   post:
  *     summary: Create a new recommendation
+ *     security:
+ *       - BearerAuth: []
  *     tags: [Recommendations]
  *     requestBody:
  *       required: true
@@ -320,32 +476,48 @@ router.get("/recommendations/non-fiction", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post("/recommendations", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const { userId, bookId, type } = req.body;
+router.post("/recommendations",
+  jwtAuthenticationRequired,
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const { userId, bookId, type } = req.body;
 
-    const recommendationId = uuid.v4();
-    const newRecommendation = new Recommendation({
-      recommendationId,
-      userId,
-      bookId,
-      type,
-      dateCreated: new Date(),
-    });
+      const recommendationId = uuid.v4();
+      const newRecommendation = new Recommendation({
+        recommendationId,
+        userId,
+        bookId,
+        type,
+        dateCreated: new Date(),
+      });
 
-    const savedRecommendation = await newRecommendation.save();
-    res.status(201).json(savedRecommendation);
-    console.log("New recommendation created:", savedRecommendation);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+      const savedRecommendation = await newRecommendation.save();
+      res.status(201).json(savedRecommendation);
+      console.log("New recommendation created:", savedRecommendation);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 /**
  * @swagger
  * /api/recommendations/{userId}:
  *   delete:
  *     summary: Delete recommendations by user ID
+ *     security:
+ *       - BearerAuth: []
  *     tags: [Recommendations]
  *     parameters:
  *       - in: path
@@ -363,29 +535,54 @@ router.post("/recommendations", jwtAuthenticationRequired, async (req, res) => {
  *       404:
  *         description: Recommendations not found for deletion
  */
-router.delete("/recommendations/:userId", jwtAuthenticationRequired, async (req, res) => {
-  try {
-    const userId = req.params.userId;
+router.delete("/recommendations/:userId",
+  jwtAuthenticationRequired,
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const userId = req.params.userId;
 
-    const deletedRecommendations = await Recommendation.deleteMany({
-      "user.userId": userId,
-    });
+      const deletedRecommendations = await Recommendation.deleteMany({
+        "user.userId": userId,
+      });
 
-    if (deletedRecommendations.deletedCount === 0) {
-      res.status(404).json({ error: "Recommendations not found for deletion" });
-      return;
+      if (deletedRecommendations.deletedCount === 0) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Error",
+          "Recommendations not found for deletion"
+        );
+        res.status(404).json({ error: "Recommendations not found for deletion" });
+        return;
+      }
+
+      res.status(200).json({
+        message: "Recommendations deleted successfully",
+        deletedRecommendations,
+      });
+      console.log("Recommendations deleted:", deletedRecommendations);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json({
-      message: "Recommendations deleted successfully",
-      deletedRecommendations,
-    });
-    console.log("Recommendations deleted:", deletedRecommendations);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  });
 
 /**
  * @swagger
@@ -414,30 +611,52 @@ router.delete("/recommendations/:userId", jwtAuthenticationRequired, async (req,
  *       404:
  *         description: Recommendation not found for type update
  */
-router.put("/recommendations/:recommendationId/type", async (req, res) => {
-  try {
-    const recommendationId = req.params.recommendationId;
-    const newType = req.body.type;
+router.put("/recommendations/:recommendationId/type",
+  logEventMiddleware,
+  async (req, res) => {
+    try {
+      const recommendationId = req.params.recommendationId;
+      const newType = req.body.type;
 
-    const updatedRecommendation = await Recommendation.findOneAndUpdate(
-      { recommendationId },
-      { $set: { type: newType } },
-      { new: true }
-    );
+      const updatedRecommendation = await Recommendation.findOneAndUpdate(
+        { recommendationId },
+        { $set: { type: newType } },
+        { new: true }
+      );
 
-    if (!updatedRecommendation) {
-      res
-        .status(404)
-        .json({ error: "Recommendation not found for type update" });
-      return;
+      if (!updatedRecommendation) {
+        await logEventMiddleware(
+          req,
+          res,
+          (err) => {
+            if (err) {
+              console.error("Error logging event:", err);
+            }
+          },
+          "Error",
+          "Recommendation not found for type update"
+        );
+        res.status(404).json({ error: "Recommendation not found for type update" });
+        return;
+      }
+
+      res.status(200).json(updatedRecommendation);
+      console.log("Recommendation type updated:", updatedRecommendation);
+    } catch (error) {
+      console.error(error);
+      await logEventMiddleware(
+        req,
+        res,
+        (err) => {
+          if (err) {
+            console.error("Error logging event:", err);
+          }
+        },
+        "Error",
+        "Internal server error"
+      );
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    res.status(200).json(updatedRecommendation);
-    console.log("Recommendation type updated:", updatedRecommendation);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  });
 
 module.exports = router;
