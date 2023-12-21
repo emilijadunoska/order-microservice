@@ -115,7 +115,8 @@ const fetchBooksByCategory = async (category) => {
  *         description: No recommendations found for the user
  */
 
-router.get("/recommendations/user/:userId",
+router.get(
+  "/recommendations/user/:userId",
   jwtAuthenticationRequired,
   logEventMiddleware,
   async (req, res) => {
@@ -135,7 +136,9 @@ router.get("/recommendations/user/:userId",
           "Warning",
           "No recommendations found for the user"
         );
-        res.status(404).json({ error: "No recommendations found for the user" });
+        res
+          .status(404)
+          .json({ error: "No recommendations found for the user" });
         return;
       }
 
@@ -229,7 +232,8 @@ router.get("/recommendations/user/:userId",
       );
       res.status(500).json({ error: "Internal server error" });
     }
-  });
+  }
+);
 
 /**
  * @swagger
@@ -246,31 +250,11 @@ router.get("/recommendations/user/:userId",
  *       404:
  *         description: No popular recommendations found
  */
-router.get("/recommendations/popular",
-  logEventMiddleware,
-  async (req, res) => {
-    try {
-      const highRatedBooks = await fetchPopularBooks();
+router.get("/recommendations/popular", logEventMiddleware, async (req, res) => {
+  try {
+    const highRatedBooks = await fetchPopularBooks();
 
-      if (!highRatedBooks || highRatedBooks.length === 0) {
-        await logEventMiddleware(
-          req,
-          res,
-          (err) => {
-            if (err) {
-              console.error("Error logging event:", err);
-            }
-          },
-          "Warning",
-          "No popular recommendations found"
-        );
-        res.status(404).json({ error: "No popular recommendations found" });
-        return;
-      }
-
-      res.status(200).json(highRatedBooks);
-      console.log("Popular recommendations:", highRatedBooks);
-    } catch (error) {
+    if (!highRatedBooks || highRatedBooks.length === 0) {
       await logEventMiddleware(
         req,
         res,
@@ -279,13 +263,31 @@ router.get("/recommendations/popular",
             console.error("Error logging event:", err);
           }
         },
-        "Error",
-        "Internal server error"
+        "Warning",
+        "No popular recommendations found"
       );
-      console.error(error);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(404).json({ error: "No popular recommendations found" });
+      return;
     }
-  });
+
+    res.status(200).json(highRatedBooks);
+    console.log("Popular recommendations:", highRatedBooks);
+  } catch (error) {
+    await logEventMiddleware(
+      req,
+      res,
+      (err) => {
+        if (err) {
+          console.error("Error logging event:", err);
+        }
+      },
+      "Error",
+      "Internal server error"
+    );
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 /**
  * @swagger
@@ -302,7 +304,8 @@ router.get("/recommendations/popular",
  *       404:
  *         description: No new arrivals recommendations found
  */
-router.get("/recommendations/new-arrivals",
+router.get(
+  "/recommendations/new-arrivals",
   logEventMiddleware,
   async (req, res) => {
     try {
@@ -320,7 +323,9 @@ router.get("/recommendations/new-arrivals",
           "Warning",
           "No new arrivals recommendations found"
         );
-        res.status(404).json({ error: "No new arrivals recommendations found" });
+        res
+          .status(404)
+          .json({ error: "No new arrivals recommendations found" });
         return;
       }
 
@@ -341,7 +346,8 @@ router.get("/recommendations/new-arrivals",
       );
       res.status(500).json({ error: "Internal server error" });
     }
-  });
+  }
+);
 
 /**
  * @swagger
@@ -358,32 +364,11 @@ router.get("/recommendations/new-arrivals",
  *       404:
  *         description: No fiction book recommendations found
  */
-router.get("/recommendations/fiction",
-  logEventMiddleware,
-  async (req, res) => {
-    try {
-      const fictionBooks = await fetchBooksByCategory("fiction");
+router.get("/recommendations/fiction", logEventMiddleware, async (req, res) => {
+  try {
+    const fictionBooks = await fetchBooksByCategory("fiction");
 
-      if (!fictionBooks || fictionBooks.length === 0) {
-        await logEventMiddleware(
-          req,
-          res,
-          (err) => {
-            if (err) {
-              console.error("Error logging event:", err);
-            }
-          },
-          "Warning",
-          "No fiction book recommendations found"
-        );
-        res.status(404).json({ error: "No fiction book recommendations found" });
-        return;
-      }
-
-      res.status(200).json(fictionBooks);
-      console.log("Fiction book recommendations:", fictionBooks);
-    } catch (error) {
-      console.error(error);
+    if (!fictionBooks || fictionBooks.length === 0) {
       await logEventMiddleware(
         req,
         res,
@@ -392,12 +377,31 @@ router.get("/recommendations/fiction",
             console.error("Error logging event:", err);
           }
         },
-        "Error",
-        "Internal server error"
+        "Warning",
+        "No fiction book recommendations found"
       );
-      res.status(500).json({ error: "Internal server error" });
+      res.status(404).json({ error: "No fiction book recommendations found" });
+      return;
     }
-  });
+
+    res.status(200).json(fictionBooks);
+    console.log("Fiction book recommendations:", fictionBooks);
+  } catch (error) {
+    console.error(error);
+    await logEventMiddleware(
+      req,
+      res,
+      (err) => {
+        if (err) {
+          console.error("Error logging event:", err);
+        }
+      },
+      "Error",
+      "Internal server error"
+    );
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 /**
  * @swagger
@@ -414,7 +418,8 @@ router.get("/recommendations/fiction",
  *       404:
  *         description: No non-fiction book recommendations found
  */
-router.get("/recommendations/non-fiction",
+router.get(
+  "/recommendations/non-fiction",
   logEventMiddleware,
   async (req, res) => {
     try {
@@ -431,7 +436,9 @@ router.get("/recommendations/non-fiction",
           "Warning",
           "No non-fiction book recommendations found"
         );
-        res.status(404).json({ error: "No non-fiction book recommendations found" });
+        res
+          .status(404)
+          .json({ error: "No non-fiction book recommendations found" });
         return;
       }
 
@@ -452,7 +459,8 @@ router.get("/recommendations/non-fiction",
       );
       res.status(500).json({ error: "Internal server error" });
     }
-  });
+  }
+);
 
 /**
  * @swagger
@@ -476,7 +484,8 @@ router.get("/recommendations/non-fiction",
  *       500:
  *         description: Internal server error
  */
-router.post("/recommendations",
+router.post(
+  "/recommendations",
   jwtAuthenticationRequired,
   logEventMiddleware,
   async (req, res) => {
@@ -510,7 +519,8 @@ router.post("/recommendations",
       );
       res.status(500).json({ error: "Internal server error" });
     }
-  });
+  }
+);
 /**
  * @swagger
  * /api/recommendations/{userId}:
@@ -535,7 +545,8 @@ router.post("/recommendations",
  *       404:
  *         description: Recommendations not found for deletion
  */
-router.delete("/recommendations/:userId",
+router.delete(
+  "/recommendations/:userId",
   jwtAuthenticationRequired,
   logEventMiddleware,
   async (req, res) => {
@@ -558,7 +569,9 @@ router.delete("/recommendations/:userId",
           "Error",
           "Recommendations not found for deletion"
         );
-        res.status(404).json({ error: "Recommendations not found for deletion" });
+        res
+          .status(404)
+          .json({ error: "Recommendations not found for deletion" });
         return;
       }
 
@@ -582,7 +595,8 @@ router.delete("/recommendations/:userId",
       );
       res.status(500).json({ error: "Internal server error" });
     }
-  });
+  }
+);
 
 /**
  * @swagger
@@ -611,7 +625,8 @@ router.delete("/recommendations/:userId",
  *       404:
  *         description: Recommendation not found for type update
  */
-router.put("/recommendations/:recommendationId/type",
+router.put(
+  "/recommendations/:recommendationId/type",
   logEventMiddleware,
   async (req, res) => {
     try {
@@ -636,7 +651,9 @@ router.put("/recommendations/:recommendationId/type",
           "Error",
           "Recommendation not found for type update"
         );
-        res.status(404).json({ error: "Recommendation not found for type update" });
+        res
+          .status(404)
+          .json({ error: "Recommendation not found for type update" });
         return;
       }
 
@@ -657,6 +674,7 @@ router.put("/recommendations/:recommendationId/type",
       );
       res.status(500).json({ error: "Internal server error" });
     }
-  });
+  }
+);
 
 module.exports = router;

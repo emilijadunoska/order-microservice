@@ -15,9 +15,9 @@ const corsOptions = {
 };
 
 messaging.setupRabbitMQ(
-  "amqp://student:student123@studentdocker.informatika.uni-mb.si:5672",
-  "rv1_sipia_4",
-  "rv1_sipia_4"
+  process.env.RABBITMQ_URL,
+  process.env.RABBITMQ_EXCHANGE,
+  process.env.RABBITMQ_QUEUE
 );
 
 app.use(cors(corsOptions));
