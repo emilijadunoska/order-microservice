@@ -2,7 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/database");
 const messaging = require("./messaging");
-const uuid = require("uuid");
 
 const { specs, swaggerUi } = require("./swagger");
 
