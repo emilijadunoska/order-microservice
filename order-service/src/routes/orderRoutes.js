@@ -17,6 +17,7 @@ const Order = require("../models/Order");
 const { CATALOG_SERVICE } = require("../../Constants");
 const { jwtAuthenticationRequired } = require("../../authMiddleware");
 const { logEventMiddleware } = require("../../messaging");
+const Stat = require("../models/Stat");
 
 // make a call to catalog service to get book information for the order
 const fetchBookInformation = async (bookId) => {
@@ -76,6 +77,22 @@ const cancelOrderById = async (orderId) => {
     throw error;
   }
 };
+
+// middleware for tracking api calls
+router.use(async (req, res, next) => {
+  const endpoint = req.originalUrl;
+  try {
+    await Stat.findOneAndUpdate(
+      { endpoint },
+      { $inc: { count: 1 } },
+      { upsert: true, new: true }
+    );
+    console.log("Stats updated for endpoint:", endpoint);
+  } catch (err) {
+    console.error("Error updating stats:", err);
+  }
+  next();
+});
 
 /**
  * @swagger
