@@ -10,6 +10,7 @@ const uuid = require("uuid");
 const axios = require("axios");
 const { jwtAuthenticationRequired } = require("../../authMiddleware");
 const { logEventMiddleware } = require("../../messaging");
+const Stat = require("../models/Stat");
 
 const Recommendation = require("../models/Recommendation");
 const { CATALOG_SERVICE } = require("../../Constants");
@@ -676,5 +677,21 @@ router.put(
     }
   }
 );
+
+// middleware for tracking api calls
+router.use(async (req, res, next) => {
+  const endpoint = req.originalUrl;
+  try {
+    await Stat.findOneAndUpdate(
+      { endpoint },
+      { $inc: { count: 1 } },
+      { upsert: true, new: true }
+    );
+    console.log("Stats updated for endpoint:", endpoint);
+  } catch (err) {
+    console.error("Error updating stats:", err);
+  }
+  next();
+});
 
 module.exports = router;
